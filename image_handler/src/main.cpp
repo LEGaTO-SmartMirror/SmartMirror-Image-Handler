@@ -56,7 +56,7 @@ int main(int argc, char * argv[]) try
 
 	// Some GPUMats that will be used later..
 	cv::cuda::GpuMat rgb_image (COLOR_INPUT_HEIGHT, COLOR_INPUT_WIDTH, CV_16U);
-	cv::cuda::GpuMat rgb_scaled (COLOR_SMALL_HEIGHT,COLOR_SMALL_WIDTH,CV_16U );
+	cv::cuda::GpuMat rgb_scaled (COLOR_SMALL_HEIGHT,COLOR_SMALL_WIDTH,CV_16U);
 	cv::cuda::GpuMat depth_image (COLOR_INPUT_HEIGHT, COLOR_INPUT_WIDTH, CV_8U);
 
 	// Some Mats that will be used later..
@@ -66,7 +66,7 @@ int main(int argc, char * argv[]) try
 	cv::Mat small_rgb_image_out;
 
 	// A gaussian filter used to blur the depth image a bit. this should remove artifacts and reduse noice.
-	Ptr<cuda::Filter> gaussian = cuda::createGaussianFilter(depth_image.type(),depth_image.type(), Size(31,31),0);
+	Ptr<cv::cuda::Filter> gaussian = cv::cuda::createGaussianFilter(depth_image.type(),depth_image.type(), Size(31,31),0);
 	
 	// And always look to the clock..
 	auto now = std::chrono::system_clock::now();
@@ -93,12 +93,15 @@ int main(int argc, char * argv[]) try
 		depth_image.download(depth_image_out);
 
 		// remove background from image		
-		cuda::GpuMat rgb_back_image = cut_background_of_rgb_image(rgb_image, depth_image, gaussian, DISTANS_TO_CROP, cam_grab.get_depth_scale());
+		cv::cuda::GpuMat rgb_back_image = cut_background_of_rgb_image(rgb_image, depth_image, gaussian, DISTANS_TO_CROP, cam_grab.get_depth_scale());
 		
+
 		rgb_back_image.download(rgb_back_image_out);	
+		cv::cuda::GpuMat background_rgb_scaled;
+		cv::Mat background_rgb_scaled_out;
 
 		// resize the image for the object and gesture detection and download it from the gpu.
-		cuda::resize(rgb_image, rgb_scaled, Size(COLOR_SMALL_WIDTH, COLOR_SMALL_HEIGHT),0,0, INTER_AREA);
+		cv::cuda::resize(rgb_image, rgb_scaled, Size(COLOR_SMALL_WIDTH, COLOR_SMALL_HEIGHT),0,0, INTER_AREA);
 		rgb_scaled.download(small_rgb_image_out); 
 
 		writer_hd_image->write_image(rgb_image_out);
@@ -159,13 +162,13 @@ void rotate_image(cv::cuda::GpuMat& input){
 	cv::cuda::GpuMat tmp;
 
 	if(IMAGE_ROTATION_RESULT == 90){
-		cuda::flip(input, tmp,1);
-		cuda::rotate(tmp, input, Size(IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT), 90.0, 0, COLOR_INPUT_WIDTH);
+		cv::cuda::flip(input, tmp,1);
+		cv::cuda::rotate(tmp, input, Size(IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT), 90.0, 0, COLOR_INPUT_WIDTH);
 	}else if(IMAGE_ROTATION_RESULT == -90) {
-		cuda::flip(input, tmp,0);
-		cuda::rotate(tmp, input, Size(IMAGE_WIDTH_RESULT,IMAGE_HEIGHT_RESULT), 90.0, 0, COLOR_INPUT_WIDTH);
+		cv::cuda::flip(input, tmp,0);
+		cv::cuda::rotate(tmp, input, Size(IMAGE_WIDTH_RESULT,IMAGE_HEIGHT_RESULT), 90.0, 0, COLOR_INPUT_WIDTH);
 	}else {
-		cuda::flip(input, tmp,1);
+		cv::cuda::flip(input, tmp,1);
 		input = tmp;
 	}
 	//return output;
@@ -194,10 +197,10 @@ cv::cuda::GpuMat cut_background_of_rgb_image(cv::cuda::GpuMat& rgb, cv::cuda::Gp
 	cv::cuda::GpuMat output;
 	cv::cuda::GpuMat depth_tmp;
 	auto thresh = double(distance_to_crop * camera_depth_scale );
-	cuda::threshold(depth,depth,thresh,255,THRESH_TOZERO_INV);
+	cv::cuda::threshold(depth,depth,thresh,255,THRESH_TOZERO_INV);
 	gaussianFilter->apply(depth, depth_tmp);	
-	cuda::threshold(depth_tmp,depth,double(5),1,THRESH_BINARY);
-	cuda::GpuMat rgb_back_image;
+	cv::cuda::threshold(depth_tmp,depth,double(5),1,THRESH_BINARY);
+	cv::cuda::GpuMat rgb_back_image;
 	rgb.copyTo(output,depth);
 	return output;
 }
@@ -382,8 +385,8 @@ void draw_persons(cv::Mat& pre_draw_image){
 	if (!json_person.is_null() && show_captions_persons){
         for (auto& element : json_person) {
             Rect rect = convert_back(element["center"][0].get<float>(), element["center"][1].get<float>(), element["w_h"][0].get<float>(), element["w_h"][1].get<float>());
-            rectangle(pre_draw_image, rect, Scalar(255,55,55));
-            putText(pre_draw_image, element["name"].get<std::string>() + "/ID:" + to_string(element["TrackID"].get<int>()),Point(rect.x, rect.y),FONT_HERSHEY_COMPLEX,1,Scalar(255,55,55),3);
+            rectangle(pre_draw_image, rect, Scalar(255,255,255));
+            putText(pre_draw_image, element["name"].get<std::string>() + "/ID:" + to_string(element["TrackID"].get<int>()),Point(rect.x, rect.y),FONT_HERSHEY_COMPLEX,1,Scalar(255,255,255),3);
         }
     } 
 }

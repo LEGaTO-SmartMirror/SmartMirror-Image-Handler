@@ -17,9 +17,9 @@ def to_node(type, message):
 	sys.stdout.flush()
 
 
-IMAGE_HEIGHT = 416
-IMAGE_WIDTH = 416
-IMAGE_STREAM_PATH = "/dev/shm/camera_small"
+IMAGE_HEIGHT = 720
+IMAGE_WIDTH = 1280
+IMAGE_STREAM_PATH = "/dev/shm/camera_1m_720p"
 
 cap = cv2.VideoCapture("shmsrc socket-path=" + str(IMAGE_STREAM_PATH) + " ! video/x-raw, format=BGR, width=" + str(IMAGE_WIDTH) + ", height=" + str(IMAGE_HEIGHT) + ", framerate=30/1 ! videoconvert ! video/x-raw, format=BGR ! appsink drop=true", cv2.CAP_GSTREAMER)
 

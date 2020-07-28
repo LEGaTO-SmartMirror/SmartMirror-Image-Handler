@@ -1,6 +1,9 @@
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/cudafilters.hpp>
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/cudaarithm.hpp>
 #include <stdio.h>
 #include <chrono>
 #include <thread>
@@ -58,13 +61,12 @@ void write_to_mjpeg_writer(cv::Mat& rgb_image_out){
 cv::Mat pre_draw_image;
 cv::Mat post_draw_image;
 
-
 // bools what is visible
 bool is_ai_art = false;
-bool show_captions_face = false;
-bool show_captions_objects = false;
-bool show_captions_gestures = false;
-bool show_captions_persons = false;
+bool show_captions_face = true;
+bool show_captions_objects = true;
+bool show_captions_gestures = true;
+bool show_captions_persons = true;
 bool show_camera = false;
 bool show_camera_1m = false;
 bool show_style_transfer = false;
@@ -90,7 +92,7 @@ void sig_handler(int sig);
 void rotate_image(cv::cuda::GpuMat& input);
 void prepare_rgb_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& rgb_image );
 void prepare_depth_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& depth_image);
-cv::cuda::GpuMat cut_background_of_rgb_image(cv::cuda::GpuMat& rgb, cv::cuda::GpuMat& depth,Ptr<cuda::Filter>& gaussianFilter, int distance_to_crop, float camera_depth_scale );
+cv::cuda::GpuMat cut_background_of_rgb_image(cv::cuda::GpuMat& rgb, cv::cuda::GpuMat& depth,Ptr<cv::cuda::Filter>& gaussianFilter, int distance_to_crop, float camera_depth_scale );
 void check_stdin();
 void to_node(std::string topic, std::string payload);
 void prepare_center_image(cv::Mat& pre_draw_image);

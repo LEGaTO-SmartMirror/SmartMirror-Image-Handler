@@ -8,7 +8,7 @@
 
 class myImage_writer {
     public:
-        myImage_writer(std::string socket_path, int FRAMERATE, int image_width, int image_height,bool with_color);
+        myImage_writer(std::string socket_path, int FRAMERATE, int image_width, int image_height,bool with_color,long buffersize);
         ~myImage_writer();
         void write_image(cv::Mat Image);
 

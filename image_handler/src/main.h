@@ -13,6 +13,7 @@
 #include "MJPEGWriter.h"
 #include <nlohmann/json.hpp>
 #include "SafeQueue.h"
+#include <iostream>
 
 // for convenience
 using json = nlohmann::json;
@@ -45,6 +46,9 @@ string gst_socket_path_small_image = "/dev/shm/camera_small";
 string gst_socket_path_image_1m = "/dev/shm/camera_1m";
 //string gst_socket_path_depth = "/dev/shm/camera_depth";
 
+VideoCapture cap_video_style;
+
+
 myImage_writer* writer_hd_image;
 myImage_writer* writer_small_image;
 myImage_writer* writer_image_1m;
@@ -61,8 +65,44 @@ void write_to_mjpeg_writer(cv::Mat& rgb_image_out){
 cv::Mat pre_draw_image;
 cv::Mat post_draw_image;
 
+const int NUMBER_OF_GESTURES = 12;
+
+string PATH_ICON_GESTURES = "../icons/";
+
+enum GESTURES {
+    GESTURE_FLAT_RIGHT,
+    GESTURE_FLAT_LEFT,
+    GESTURE_OK_RIGHT,
+    GESTURE_OK_LEFT,
+    GESTURE_THUMPS_UP_RIGHT,
+    GESTURE_THUMPS_UP_LEFT,
+    GESTURE_THUMPS_DOWN_RIGHT,
+    GESTURE_THUMPS_DOWN_LEFT,
+    GESTURE_TWO_LEFT,
+    GESTURE_TWO_RIGHT,
+    GESTURE_ONE_LEFT,
+    GESTURE_ONE_RIGHT
+};
+
+string str_gestures[NUMBER_OF_GESTURES] = {
+    "flat_right",
+    "flat_left",
+    "okay_right",
+    "okay_left",
+    "thumbs_up_right",
+    "thumbs_up_left",
+    "thumbs_down_right",
+    "thumbs_down_left",
+    "two_left",
+    "two_right",
+    "one_left",
+    "one_right"
+};
+
+cv::Mat gesture_images[NUMBER_OF_GESTURES]; 
+
 // bools what is visible
-bool is_ai_art = false;
+bool is_ai_art = true;
 bool show_captions_face = true;
 bool show_captions_objects = true;
 bool show_captions_gestures = true;
@@ -89,9 +129,10 @@ double framecounter = 0.0;
 
 // Function headers
 void sig_handler(int sig);
+void load_images_gestures();
 void rotate_image(cv::cuda::GpuMat& input);
-void prepare_rgb_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& rgb_image );
-void prepare_depth_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& depth_image);
+void prepare_rgb_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& rgb_image, cv::Mat& rgb);
+void prepare_depth_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& depth_image, cv::Mat& depth8u);
 cv::cuda::GpuMat cut_background_of_rgb_image(cv::cuda::GpuMat& rgb, cv::cuda::GpuMat& depth,Ptr<cv::cuda::Filter>& gaussianFilter, int distance_to_crop, float camera_depth_scale );
 void check_stdin();
 void to_node(std::string topic, std::string payload);

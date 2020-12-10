@@ -6,14 +6,14 @@ using namespace std;
 
 void myCamera_grabber::mg_init(){
 
-    std::cout << "{\"STATUS\": \"my_camera_grabber is starting to initialise \"}" << std::endl;
+	std::cout << "{\"STATUS\": \"my_camera_grabber is starting to initialise \"}" << std::endl;
 
-    cfg.enable_stream(RS2_STREAM_DEPTH, DEPTH_INPUT_WIDTH, DEPTH_INPUT_HEIGHT, RS2_FORMAT_Z16, FRAMERATE);
+	cfg.enable_stream(RS2_STREAM_DEPTH, DEPTH_INPUT_WIDTH, DEPTH_INPUT_HEIGHT, RS2_FORMAT_Z16, FRAMERATE);
 	cfg.enable_stream(RS2_STREAM_COLOR, COLOR_INPUT_WIDTH, COLOR_INPUT_HEIGHT, RS2_FORMAT_BGR8, FRAMERATE);
 
-    rs2::pipeline_profile profile = pipe.start(cfg);
+	rs2::pipeline_profile profile = pipe.start(cfg);
 
-    // Each depth camera might have different units for depth pixels, so we get it here
+	// Each depth camera might have different units for depth pixels, so we get it here
 	// Using the pipeline's profile, we can retrieve the device that the pipeline uses
 	depth_scale = get_depth_scale(profile.get_device());
 

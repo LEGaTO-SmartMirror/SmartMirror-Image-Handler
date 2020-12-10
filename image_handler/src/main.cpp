@@ -15,11 +15,16 @@ int main(int argc, char * argv[]) try
 		IMAGE_WIDTH_RESULT = atoi(argv[1]);
 		IMAGE_HEIGHT_RESULT = atoi(argv[2]);
 		IMAGE_ROTATION_RESULT = atoi(argv[3]);
-		to_node("STATUS", "parsing args");
+
+		if(argc > 4){
+			PATH_ICON_GESTURES = argv[4];
+		}
+		to_node("STATUS", "parsing args done");
 	}
 
 	//std::cout << "{\"STATUS\": \"starting with config: " <<  IMAGE_WIDTH_RESULT << " " << IMAGE_HEIGHT_RESULT << " " << IMAGE_ROTATION_RESULT << " \"}" << std::endl;
 	
+	cv::Mat black_image = cv::Mat::zeros(cv::Size(IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT), CV_8UC3);
 
 	// create camera graber and initialize it
 	myCamera_grabber cam_grab;
@@ -44,14 +49,14 @@ int main(int argc, char * argv[]) try
 
 	// Create mjpeg writer with a choosen port.
 	// TODO maybe parameterize the port ???
-	mjpeg_writer_ptr = new MJPEGWriter(7778);
+	mjpeg_writer_ptr = new MJPEGWriter(7777);
 	center_writer_thr = new std::thread(write_to_mjpeg_writer,std::ref(post_draw_image));
-    mjpeg_writer_ptr->start(); //Starts the HTTP Server on the selected port
+	mjpeg_writer_ptr->start(); //Starts the HTTP Server on the selected port
 
 	// Create image output devices for each image that is shared
-	writer_hd_image  	= new myImage_writer(gst_socket_path_hd_image, FRAMERATE, IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT, true);
-	writer_small_image 	= new myImage_writer(gst_socket_path_small_image, FRAMERATE, COLOR_SMALL_WIDTH, COLOR_SMALL_HEIGHT, true);
-	writer_image_1m 	= new myImage_writer(gst_socket_path_image_1m, FRAMERATE, IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT, true);
+	writer_hd_image  	= new myImage_writer(gst_socket_path_hd_image, FRAMERATE, IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT, true, 200000000);
+	writer_small_image 	= new myImage_writer(gst_socket_path_small_image, FRAMERATE, COLOR_SMALL_WIDTH, COLOR_SMALL_HEIGHT, true,100000000);
+	writer_image_1m 	= new myImage_writer(gst_socket_path_image_1m, FRAMERATE, IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT, true,100000000);
 	//writer_depth_image 	= new myImage_writer(gst_socket_path_depth, FRAMERATE, IMAGE_WIDTH_RESULT, IMAGE_HEIGHT_RESULT, false);
 
 	// Some GPUMats that will be used later..
@@ -72,6 +77,18 @@ int main(int argc, char * argv[]) try
 	auto now = std::chrono::system_clock::now();
 	auto before = now;
 
+
+	char cwd[100];
+	getcwd(cwd,sizeof(cwd));
+	to_node("STATUS", cwd );
+
+
+	load_images_gestures();
+    	to_node("STATUS","Gesture images loaded.");
+
+
+	string gst_string_style = "shmsrc socket-path=/dev/shm/style_transfer ! video/x-raw, format=BGR, height=" + to_string(IMAGE_HEIGHT_RESULT) + ", width=" + to_string(IMAGE_WIDTH_RESULT) + ", framerate=30/1 ! videoconvert ! video/x-raw, format=BGR ! appsink drop=true sync=false";
+	
 	//std::cout << "{\"INIT\": \"DONE\"}" << std::endl;
 	to_node("INIT", "DONE");
 	//to_node("STATUS","starting with config: " + IMAGE_WIDTH_RESULT );
@@ -83,40 +100,105 @@ int main(int argc, char * argv[]) try
 		// get a new camera image pair. It will be aligned already
 		auto processed = cam_grab.get_cam_images();
 
-		prepare_rgb_image_thr = new std::thread(prepare_rgb_image, processed, std::ref(rgb_image));
-		prepare_depth_image_thr = new std::thread(prepare_depth_image, processed, std::ref(depth_image));
+		try{
+			prepare_rgb_image_thr = new std::thread(prepare_rgb_image, processed, std::ref(rgb_image), std::ref(rgb_image_out));
+			prepare_depth_image_thr = new std::thread(prepare_depth_image, processed, std::ref(depth_image), std::ref(depth_image_out));
+		} catch (...) {
+			to_node("STATUS","IMAGE PREPARE THREAD FAILED");
+			continue;
+		}
 
-		prepare_rgb_image_thr->join();
-		rgb_image.download(rgb_image_out);
+		try{
+			prepare_rgb_image_thr->join();
+			//rgb_image.download(rgb_image_out);
 
-		prepare_depth_image_thr->join();
-		depth_image.download(depth_image_out);
+			prepare_depth_image_thr->join();
+			//depth_image.download(depth_image_out);
+		} catch (...) {
+			to_node("STATUS","JOIN IMAGE PREPARE THREAD AND DOWNLOAD IMAGES FAILED");
+			continue;
+		}
 
-		// remove background from image		
-		cv::cuda::GpuMat rgb_back_image = cut_background_of_rgb_image(rgb_image, depth_image, gaussian, DISTANS_TO_CROP, cam_grab.get_depth_scale());
+		try{
+			// remove background from image		
+			cv::cuda::GpuMat rgb_back_image = cut_background_of_rgb_image(rgb_image, depth_image, gaussian, DISTANS_TO_CROP, cam_grab.get_depth_scale());
+			rgb_back_image.download(rgb_back_image_out);
 		
+		} catch (...) {
+			to_node("STATUS","CUT BACKGROUND FROM IMAGES FAILED");
+			continue;
+		}
 
-		rgb_back_image.download(rgb_back_image_out);	
-		cv::cuda::GpuMat background_rgb_scaled;
-		cv::Mat background_rgb_scaled_out;
+		try{
+			// resize the image for the object and gesture detection and download it from the gpu.
+			cv::cuda::resize(rgb_image, rgb_scaled, Size(COLOR_SMALL_WIDTH, COLOR_SMALL_HEIGHT),0,0, INTER_AREA);
+			rgb_scaled.download(small_rgb_image_out); 
+		} catch (...) {
+			to_node("STATUS","SCALE IMAGE SMALL");
+			continue;
+		}
 
-		// resize the image for the object and gesture detection and download it from the gpu.
-		cv::cuda::resize(rgb_image, rgb_scaled, Size(COLOR_SMALL_WIDTH, COLOR_SMALL_HEIGHT),0,0, INTER_AREA);
-		rgb_scaled.download(small_rgb_image_out); 
 
-		writer_hd_image->write_image(rgb_image_out);
-		writer_small_image->write_image(small_rgb_image_out);
-		writer_image_1m->write_image(rgb_back_image_out);
-		//writer_depth_image->write_image(depth_image_out);
+		try{
+			writer_hd_image->write_image(rgb_image_out);
+			writer_small_image->write_image(small_rgb_image_out);
+			writer_image_1m->write_image(rgb_back_image_out);
+			//writer_depth_image->write_image(depth_image_out);
+		} catch (...) {
+			to_node("STATUS","IMAGE WRITER FAILED");
+			continue;
+		}
 
-		prepare_center_image_thr->join();
-		center_writer_thr->join();
+		try{
+			prepare_center_image_thr->join();
+			center_writer_thr->join();
+		} catch (...) {
+			to_node("STATUS","JOIN THREADS FROM LAST ITERATION");
+			continue;
+		}
 
-		pre_draw_image.copyTo(post_draw_image);
-		rgb_back_image_out.copyTo(pre_draw_image);
+		//cap_video_style >> post_draw_image;
 		
-		center_writer_thr = new std::thread(write_to_mjpeg_writer, std::ref(post_draw_image));
-		prepare_center_image_thr = new std::thread(prepare_center_image, std::ref(pre_draw_image));
+		if(show_style_transfer){
+			try{
+				if (!cap_video_style.isOpened()) {
+					to_node("STATUS", "style transfere image sink was not ready jet (?)..");
+         				cap_video_style.open(gst_string_style, CAP_GSTREAMER);
+            				std::this_thread::sleep_for(std::chrono::seconds(1));
+       				 } else {
+				
+					Mat frame;
+					if (cap_video_style.read(frame)){
+						frame.copyTo(post_draw_image);
+					}
+				}
+			} catch (...) {
+				to_node("STATUS","STYLE TRANSFERE FAILED");
+				continue;
+			}
+		} else {
+
+			pre_draw_image.copyTo(post_draw_image);
+
+		}
+
+		if(show_camera){
+			if(show_camera_1m){
+				rgb_back_image_out.copyTo(pre_draw_image);
+			} else {
+				rgb_image_out.copyTo(pre_draw_image);
+			}
+		} else {
+			black_image.copyTo(pre_draw_image);
+		}
+		
+		try{
+			center_writer_thr = new std::thread(write_to_mjpeg_writer, std::ref(post_draw_image));
+			prepare_center_image_thr = new std::thread(prepare_center_image, std::ref(pre_draw_image));
+		} catch (...) {
+			to_node("STATUS","DRAW CENTER IMAGE AND WRITE THREADS FAILED");
+			continue;
+		}
 		
 		// -------------------------------------------------------------------------------
 		// sleep if to fast.. and print fps after 30 frames
@@ -155,6 +237,15 @@ catch( const std::exception & e )
 // -------------------------------------------------------------------------------
 // Function description below
 
+
+void load_images_gestures() {
+    for (int i = 0; i < NUMBER_OF_GESTURES ; i++) {
+	//std::cout << PATH_ICON_GESTURES << str_gestures[i] << ".jpg" << std::endl;
+	resize(imread(PATH_ICON_GESTURES + str_gestures[i] + ".jpg"), gesture_images[i],Size(100,100));
+        //gesture_images[i] = imread(PATH_ICON_GESTURES + str_gestures[i] + ".jpg"); 
+    } 
+}
+
 // rotate and flip input image according to IMAGE_ROTATION_RESULT
 // A flip is always needed due to being a mirror
 void rotate_image(cv::cuda::GpuMat& input){
@@ -174,22 +265,42 @@ void rotate_image(cv::cuda::GpuMat& input){
 	//return output;
 }
 
+void rotate_image_cv(cv::Mat& input){
+	//cv::cuda::GpuMat input_fliped;
+	cv::Mat tmp;
+
+	if(IMAGE_ROTATION_RESULT == 90){
+		cv::transpose(input, input);
+		//cv::flip(tmp ,input,1);
+		//cv::rotate(tmp, input, 1);
+	}else if(IMAGE_ROTATION_RESULT == -90) {
+		cv::flip(input, tmp,0);
+		cv::rotate(tmp, input, 90);
+	}else {
+		cv::flip(input, tmp,1);
+		input = tmp;
+	}
+	//return output;
+}
+
 // Create color image
-void prepare_rgb_image (rs2::frameset processed_frameSet,cv::cuda::GpuMat& rgb_image ){
+void prepare_rgb_image (rs2::frameset processed_frameSet,cv::cuda::GpuMat& rgb_image, cv::Mat& rgb ){
 	rs2::frame color = processed_frameSet.get_color_frame();
-	cv::Mat rgb (COLOR_INPUT_HEIGHT, COLOR_INPUT_WIDTH, CV_8UC3, (uchar *) color.get_data());
-	rgb_image.upload(rgb);
-	rotate_image(rgb_image);
+	cv::Mat tmp_rgb (COLOR_INPUT_HEIGHT, COLOR_INPUT_WIDTH, CV_8UC3, (uchar *) color.get_data());
+	rotate_image_cv(tmp_rgb);
+	rgb_image.upload(tmp_rgb);
+	rgb = tmp_rgb;
+	//rotate_image(rgb_image);
 }
 
 // Create depth image
-void prepare_depth_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& depth_image){
-	cv::Mat depth8u;	
+void prepare_depth_image (rs2::frameset processed_frameSet, cv::cuda::GpuMat& depth_image, cv::Mat& depth8u){
 	rs2::frame depth = processed_frameSet.get_depth_frame();
 	cv::Mat depth16 (COLOR_INPUT_HEIGHT, COLOR_INPUT_WIDTH, CV_16U,(uchar *) depth.get_data());
 	cv::convertScaleAbs(depth16,depth8u, 0.03);
+	rotate_image_cv(depth8u);
 	depth_image.upload(depth8u);
-	rotate_image(depth_image);
+	//rotate_image(depth_image);
 }
 
 // cut everything away that is to far away.
@@ -222,6 +333,7 @@ void sig_handler(int sig) {
 		delete writer_image_1m;
 		//delete writer_depth_image;
 		delete mjpeg_writer_ptr;
+
 		exit(0);
     default:
         fprintf(stderr, "wasn't expecting that!\n");
@@ -251,6 +363,7 @@ void set_command(string setting) {
         show_captions_gestures = false;
         show_captions_persons = false;
         show_style_transfer = !show_style_transfer;
+	to_node("STATUS","STYLE_TRANSFERE was toggelt");
     } else if (setting == "HIDEALL") {
         show_camera = false;
         show_camera_1m = false;
@@ -261,7 +374,6 @@ void set_command(string setting) {
         show_style_transfer = false;
     } else if (setting == "SHOWALL") {
         show_camera = true;
-        show_camera_1m = false;
         show_captions_face = true;
         show_captions_objects = true;
         show_captions_gestures = true;
@@ -310,10 +422,15 @@ void check_stdin(){
 
 // Prepare the center image 
 void prepare_center_image(cv::Mat& pre_draw_image){
-	draw_objects(std::ref(pre_draw_image));
-	draw_gestures(std::ref(pre_draw_image));
-	draw_faces(std::ref(pre_draw_image));
-	draw_persons(std::ref(pre_draw_image));
+	try{
+		draw_objects(std::ref(pre_draw_image));
+		draw_gestures(std::ref(pre_draw_image));
+		draw_faces(std::ref(pre_draw_image));
+		draw_persons(std::ref(pre_draw_image));
+	} catch (...) {
+		to_node("STATUS","DRAW IMAGE FAILED");
+		
+	}
 }
 
 // converting x,y and w,h to a cv rect
@@ -349,12 +466,31 @@ void draw_gestures(cv::Mat& pre_draw_image){
 		i--;
 	}
 	if (!json_gesture.is_null() && show_captions_gestures ){
-        for (auto& element : json_gesture) {
-            Rect rect = convert_back(element["center"][0].get<float>(), element["center"][1].get<float>(), element["w_h"][0].get<float>(), element["w_h"][1].get<float>());
-            rectangle(pre_draw_image, rect, Scalar(55,255,55));
-            putText(pre_draw_image, element["name"].get<std::string>() + "/ID:" + to_string(element["TrackID"].get<int>()),Point(rect.x, rect.y),FONT_HERSHEY_COMPLEX,1,Scalar(55,255,55),3);
-        }
-    } 
+        	for (auto& element : json_gesture) {
+           		Rect rect = convert_back(element["center"][0].get<float>(), element["center"][1].get<float>(), element["w_h"][0].get<float>(), element["w_h"][1].get<float>());
+            		rectangle(pre_draw_image, rect, Scalar(55,255,55));
+            		putText(pre_draw_image, element["name"].get<std::string>() + "/ID:" + to_string(element["TrackID"].get<int>()),Point(rect.x, rect.y),FONT_HERSHEY_COMPLEX,1,Scalar(55,255,55),3);
+        	}
+	}
+	if(!show_captions_gestures && !show_captions_objects && !show_captions_face && !show_camera){
+		for (auto& element : json_gesture) {   
+			for (int i = 0 ; i < NUMBER_OF_GESTURES; i++){
+				if (element["name"].get<std::string>().compare(str_gestures[i]) == 0){
+					//Rect rect = convert_back(element["center"][0].get<float>(), element["center"][1].get<float>(),  element["w_h"][1].get<float>());
+					gesture_images[i].copyTo(pre_draw_image(cv::Rect(element["center"][0].get<float>() * IMAGE_WIDTH_RESULT,element["center"][1].get<float>() * IMAGE_HEIGHT_RESULT,gesture_images[i].cols, gesture_images[i].rows)));
+				}
+			}
+
+
+			/*for (auto gesture : str_gestures) {
+				if (element["name"].get<std::string>().compare(gesture) == 0){
+					to_node("STATUS", gesture + "needs to be drawn");
+					//small_image.copyTo(big_image(cv::Rect(x,y,small_image.cols, small_image.rows)));
+					//gesture_images
+				}
+			} */
+		}
+   	} 
 }
 
 // Draw detected faces in to referenced image.

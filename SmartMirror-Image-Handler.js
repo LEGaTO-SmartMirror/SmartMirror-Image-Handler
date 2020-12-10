@@ -21,10 +21,11 @@ Module.register('SmartMirror-Image-Handler',{
 	},
 
 	start: function() {
-		const self = this;
-		this.is_initialized = false;
-
-		self.sendSocketNotification('CONFIG', this.config);	
+		self = this;
+		this.is_shown = false;
+		this.is_already_build = false;
+		
+		this.sendSocketNotification('CONFIG', this.config);	
 
 		Log.info('Starting module: ' + this.name);
 
@@ -33,30 +34,44 @@ Module.register('SmartMirror-Image-Handler',{
 	getDom: function () {
 
 		Log.info('REFRESH DOM:  ' + this.name);
-		
-			var wrapper = document.createElement("div");
-			wrapper.className = "video";
+		var wrapper = document.createElement("div");
+		wrapper.className = "video";
 
-			if (this.is_initialized){
-			wrapper.innerHTML = "<iframe width=\"" + this.config.image_width + "\" height=\"" + this.config.image_height + "\" src=\"http://0.0.0.0:"+ this.config.port +"\" frameborder=\"0\" allowfullscreen></iframe>";
-			}
+		if(this.is_shown) {
+            wrapper.innerHTML = "<iframe width=\"" + this.config.image_width + "\" height=\"" + this.config.image_height + "\" src=\"http://0.0.0.0:"+ this.config.port +"\" frameborder=\"0\" allowfullscreen></iframe>";
+            //wrapper.innerHTML = "<iframe width=\"" + this.config.width +"\" height=\"" + this.config.height + "\" src=\"http://0.0.0.0:5000/video_feed\" frameborder=\"0\" allowfullscreen></iframe>";
+		};
 
-			return wrapper;
-		
+		return wrapper;
+
+	},
+
+	suspend: function(){
+		//this.sendNotification(this.config.publischerName + "SetFPS", this.config.backgroundFPS);
+	},
+
+	resume: function(){
+		//this.sendNotification(this.config.publischerName + "SetFPS", this.config.forgroundFPS);
+		this.is_shown = true;
+		if(!this.is_already_build) {
+            this.updateDom();
+            this.is_already_build = true;
+        };
 	},
 
 
 	notificationReceived: function(notification, payload) {
+		const self = this;
 		if(notification === 'CENTER_DISPLAY') {
-			this.sendSocketNotification('CENTER_DISPLAY', payload);
+			self.sendSocketNotification('CENTER_DISPLAY', payload);
 		}else if (notification === 'DETECTED_GESTURES') {
-			this.sendSocketNotification('DETECTED_GESTURES', payload);
+			self.sendSocketNotification('DETECTED_GESTURES', payload);
 		}else if (notification === 'DETECTED_FACES') {
-			this.sendSocketNotification('DETECTED_FACES', payload);
+			self.sendSocketNotification('DETECTED_FACES', payload);
 		}else if (notification === 'DETECTED_OBJECTS') {
-			this.sendSocketNotification('DETECTED_OBJECTS', payload);
+			self.sendSocketNotification('DETECTED_OBJECTS', payload);
 		}else if (notification === 'RECOGNIZED_PERSONS') {
-			this.sendSocketNotification('RECOGNIZED_PERSONS', payload);
+			self.sendSocketNotification('RECOGNIZED_PERSONS', payload);
 		}
 	},
 	
@@ -64,10 +79,10 @@ Module.register('SmartMirror-Image-Handler',{
 	socketNotificationReceived: function(notification, payload) {
 		const self = this;
 		if (notification === 'IMAGE_HANDLER_FPS') {
-			this.sendNotification('IMAGE_HANDLER_FPS', payload);
+			self.sendNotification('IMAGE_HANDLER_FPS', payload);
 		} else if (notification === 'INIT') {
-			this.is_initialized = true;
-			setTimeout(() => {this.updateDom();}, 1000);
+			//self.is_initialized = true;
+			//setTimeout(() => {self.updateDom();}, 10000);
 		}
 	},
 

@@ -10,10 +10,16 @@ module.exports = NodeHelper.create({
 
 	sub_prozess_start: function () {
 		const self = this;
-		self.imagehandler_cpp = spawn('modules/' + this.name + '/image_handler/build/image_handler',[self.config.image_width, self.config.image_height, self.config.rotation, self.config.debug]);
+		self.imagehandler_cpp = spawn('modules/' + this.name + '/image_handler/build/image_handler',[self.config.image_width, self.config.image_height, self.config.rotation, "modules/" + self.name + "/image_handler/icons/" , self.config.debug]);
 		self.imagehandler_cpp.stdout.on('data', (data) => {
+
+			var data_chunks = `${data}`.split('\n');
+			
+			data_chunks.forEach( chunk => {
+
+			if (chunk.length > 0) {
 			try{
-				var parsed_message = JSON.parse(`${data}`)
+				var parsed_message = JSON.parse(chunk)
 				if (parsed_message.hasOwnProperty('IMAGE_HANDLER_FPS')){
 					self.sendSocketNotification('IMAGE_HANDLER_FPS', parsed_message.IMAGE_HANDLER_FPS);
 					//console.log("[" + self.name + "] " + JSON.stringify(parsed_message));
@@ -27,9 +33,11 @@ module.exports = NodeHelper.create({
 				}
 			}
 			catch(err) {	
-			//console.log(err)
+			console.log(err)
 			}
-  			//console.log(`stdout: ${data}`);
+  			//console.log(chunk);
+			}
+			});
 			});
 	},
 
@@ -48,7 +56,7 @@ module.exports = NodeHelper.create({
 			this.sub_prozess_start(); 
 			started = true;
     		}else if(notification === 'CENTER_DISPLAY'){
-			var data = {"FPS": payload};
+			var data = {"SET": payload};
 			self.imagehandler_cpp.stdin.write(JSON.stringify(data) + "\n");
 		}else if (notification === 'DETECTED_GESTURES'){
 			self.imagehandler_cpp.stdin.write(JSON.stringify(payload) + "\n");

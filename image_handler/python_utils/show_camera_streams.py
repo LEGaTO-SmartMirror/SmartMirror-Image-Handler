@@ -4,7 +4,7 @@
 
 import cv2
 import sys
-
+import time
 
 
 def to_node(type, message):
@@ -17,15 +17,26 @@ def to_node(type, message):
 	sys.stdout.flush()
 
 
-IMAGE_HEIGHT = 720
-IMAGE_WIDTH = 1280
-IMAGE_STREAM_PATH = "/dev/shm/camera_1m_720p"
+IMAGE_HEIGHT = 416 #1080
+IMAGE_WIDTH = 416 #1920
+IMAGE_STREAM_PATH = "/dev/shm/camera_small"
 
-cap = cv2.VideoCapture("shmsrc socket-path=" + str(IMAGE_STREAM_PATH) + " ! video/x-raw, format=BGR, width=" + str(IMAGE_WIDTH) + ", height=" + str(IMAGE_HEIGHT) + ", framerate=30/1 ! videoconvert ! video/x-raw, format=BGR ! appsink drop=true", cv2.CAP_GSTREAMER)
+FPS = int (sys.argv[1])
 
-cv2.namedWindow("small image", cv2.WINDOW_NORMAL)
+
+cap = cv2.VideoCapture("shmsrc socket-path=" + str(IMAGE_STREAM_PATH) + " ! video/x-raw, format=BGR, width=" + str(IMAGE_WIDTH) + ", height=" + str(IMAGE_HEIGHT) + ", framerate=30/1 ! queue max-size-buffers=5  leaky=2 ! videoconvert ! video/x-raw, format=BGR ! appsink drop=true", cv2.CAP_GSTREAMER)
+
+# ! queue max-size-time=100 leaky=2 !
+
+
+cv2.namedWindow("small image - " + str(FPS) + " FPS", cv2.WINDOW_NORMAL)
+
+
+
 
 while True:
+
+	start_time = time.time()
 
 	ret, frame = cap.read()
 	if ret is False:
@@ -33,5 +44,11 @@ while True:
 		continue
 
 
-	cv2.imshow("small image", frame)
+	cv2.imshow("small image - " + str(FPS) + " FPS", frame)
 	cv2.waitKey(33)
+
+	delta = time.time() - start_time
+
+
+	if (1.0 / FPS) - delta > 0:
+		time.sleep((1.0 / FPS) - delta)
